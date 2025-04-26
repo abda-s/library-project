@@ -1,33 +1,46 @@
-// index.js
-const express = require("express");
-const RFIDReader = require("./rfidReader");
+const express = require('express');
+const RFIDReader = require('./RFIDReader');
+const ArduinoDevice = require('./ArduinoDevice');
 
 const app = express();
-const PORT = process.env.PORT || 4000;
+const port = process.env.PORT || 4000;
 
-// create & start the reader
-const reader = new RFIDReader();
-reader.on("connected", path =>
-  console.log(`RFID reader connected on ${path}`)
-);
-reader.on("tag", tag =>
-  console.log("RFID Tag Scanned:", tag)
-);
-reader.on("disconnected", () =>
-  console.log("RFID reader disconnected; attempting reconnect...")
-);
-reader.on("error", err =>
-  console.error("RFID Reader Error:", err.message)
-);
-reader.start();
-
-// normal Express setup
 app.use(express.json());
-app.listen(PORT, () =>
-  console.log(`Server running on port ${PORT}`)
-);
 
-// (Optionally expose an endpoint to get reader status)
-app.get("/rfid/status", (req, res) => {
-  res.json({ connected: !!reader.port, attempts: reader.attempts });
+const rfidReader = new RFIDReader();
+const arduino = new ArduinoDevice();
+
+rfidReader.on('connected', (path) => {
+  console.log(`RFID connected on ${path}`);
+});
+
+rfidReader.on('tag', (tag) => {
+  console.log(`RFID Tag: ${tag}`);
+});
+
+arduino.on('connected', (path) => {
+  console.log(`Arduino connected on ${path}`);
+});
+
+arduino.on('arduino-data', (data) => {
+  // console.log(`Arduino says: ${data}`);
+});
+
+app.post('/send-to-arduino', (req, res) => {
+  const { message } = req.body;
+  if (!message) return res.status(400).send('No message provided');
+
+  arduino.send(message);
+  res.send('Message sent');
+});
+
+app.listen(port, () => {
+  console.log(`Server running on port ${port}`);
+  rfidReader.start();
+  arduino.start();
+
+  setInterval(() => {
+    rfidReader.start();
+    arduino.send("RAINBOW");
+  }, 1000);
 });
