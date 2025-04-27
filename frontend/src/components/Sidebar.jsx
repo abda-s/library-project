@@ -23,7 +23,7 @@ const Sidebar = () => {
 
   return (
     <div 
-      className={`h-screen bg-white shadow-lg fixed left-0 top-0 transition-all duration-300 z-50
+      className={`h-screen bg-white shadow-lg left-0 top-0 transition-all duration-300 z-50
         ${isCollapsed ? 'w-20' : 'w-64'}`}
     >
       <div className="flex flex-col h-full">

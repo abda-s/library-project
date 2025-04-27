@@ -4,7 +4,7 @@ export default function Layout({children}) {
   return (
     <div className="flex">
       <Sidebar />
-      <main className="flex-1 p-8 ml-64"> {/* Adjust margin based on sidebar width */}
+      <main className="flex-1 p-8"> {/* Adjust margin based on sidebar width */}
         {children}
       </main>
     </div>
