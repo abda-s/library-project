@@ -8,7 +8,6 @@ class RFIDReader extends SerialDevice {
       baudRate: 115200,
       pollInterval: 2000,
       maxRetry: 10000,
-      debug: true
     });
   }
 
