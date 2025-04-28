@@ -5,7 +5,9 @@ const { Server } = require('socket.io');
 const RFIDReader = require('./RFIDReader');
 const fs = require('fs');
 const path = require('path');
+const db = require("./models");
 
+const PORT = process.env.PORT || 4000;
 const app = express();
 const server = createServer(app);
 const io = new Server(server, {
@@ -36,21 +38,72 @@ const reader = new RFIDReader({ debug: true });
 const tagTracking = new Map();
 
 reader.on('tag', (data) => {
-  // data is each line of info from the reader
   try {
-    const [port, tagId, timestamp, rssi] = data.split(',');
-    const numericRssi = parseInt(rssi, 10); // made it a number instead of a string
-    const numericTimestamp = Math.floor(parseInt(timestamp, 10) / 1000); // made it a number instead of a string
-    const timestampDate = new Date(numericTimestamp); // made it a date instead of a number
+    // 1. Basic check: Ensure data is a non-empty string
+    if (typeof data !== 'string' || data.trim() === '') {
+      console.warn('Received empty or invalid data type:', data);
+      return; // Stop processing this line
+    }
 
-    //console.log("Timestamp:", numericTimestamp, "Date:", timestampDate); // logging the timestamp and date
+    const parts = data.split(',');
 
-        // ===> SAVE TO CSV
-        const dateUtc = new Date(numericTimestamp).toISOString();
-        const dateJordan = new Date(numericTimestamp).toLocaleString('en-US', { timeZone: 'Asia/Amman' });
-        const csvLine = `${port},${tagId},${dateUtc},${rssi}\n`;
-        fs.appendFileSync(logFilePath, csvLine, 'utf8');
-        // <=== SAVE TO CSV
+    // 2. Check number of parts: Ensure there are exactly 4 parts
+    if (parts.length !== 4) {
+      console.warn('Received data with incorrect number of parts:', data);
+      return; // Stop processing this line
+    }
+
+    const [port, tagId, timestampStr, rssiStr] = parts;
+
+    // 3. Check format and parse: Ensure tagId is not empty, and timestamp/rssi are valid numbers
+    if (tagId.trim() === '') {
+      console.warn('Received data with empty tagId:', data);
+      return; // Stop processing this line
+    }
+
+    const numericRssi = parseInt(rssiStr, 10);
+    // Check if rssi is a valid integer
+    if (isNaN(numericRssi)) {
+      console.warn('Received data with invalid RSSI:', data);
+      return; // Stop processing this line
+    }
+
+    const numericTimestampMs = parseInt(timestampStr, 10);
+    // Check if timestamp is a valid integer
+    if (isNaN(numericTimestampMs)) {
+        console.warn('Received data with invalid timestamp:', data);
+        return; // Stop processing this line
+    }
+
+    // Convert timestamp from milliseconds to seconds (as per your original logic)
+    const numericTimestamp = Math.floor(numericTimestampMs / 1000);
+    const timestampDate = new Date(numericTimestamp * 1000); // Create Date object from seconds
+
+    // You might also want to add checks for plausible ranges, e.g.,
+    // Check if timestampDate is a valid Date object (e.g., not "Invalid Date")
+    if (isNaN(timestampDate.getTime())) {
+         console.warn('Could not create valid Date from timestamp:', data);
+         return; // Stop processing this line
+    }
+
+    // You could also add a check if the timestamp is reasonably recent if needed
+    // const now = Date.now();
+    // const timeDifference = now - numericTimestampMs;
+    // if (timeDifference > 600000 || timeDifference < -600000) { // Example: check if within 10 minutes
+    //      console.warn('Received data with suspicious timestamp:', data);
+    //      io.emit('scan_error', { error: 'Received data with suspicious timestamp' });
+    //      return; // Stop processing this line
+    // }
+
+
+    // If all checks pass, the data is considered valid for further processing:
+
+    // ===> SAVE TO CSV
+    const dateUtc = new Date(numericTimestamp * 1000).toISOString(); // Use the timestamp in milliseconds
+    const dateJordan = new Date(numericTimestamp * 1000).toLocaleString('en-US', { timeZone: 'Asia/Amman' }); // Use the timestamp in milliseconds
+    const csvLine = `${port},${tagId},${dateUtc},${rssiStr}\n`; // Use original rssiStr for CSV if preferred, or numericRssi
+    fs.appendFileSync(logFilePath, csvLine, 'utf8');
+    // <=== SAVE TO CSV
 
     // Handle RSSI < -50
     if (numericRssi < -50) {
@@ -74,19 +127,14 @@ reader.on('tag', (data) => {
     };
 
     // Store reading
-    // entry.readings.push({
-    //   timestamp: numericTimestamp,
-    //   rssi: numericRssi
-    // });
-
     entry.readings.push({
       port: port,
       timestamp: timestampDate,
       rssi: numericRssi
     });
 
-    // Keep only last 30 readings
-    if (entry.readings.length > 100) {
+    // Keep only last 100 readings
+    if (entry.readings.length > 30) {
       entry.readings.shift();
     }
 
@@ -97,18 +145,25 @@ reader.on('tag', (data) => {
     // Check for valid reading window
     if (!entry.processing) {
       entry.processing = true;
-      
+
       // Analyze readings after short debounce
       setTimeout(() => {
-        const validReadings = entry.readings.filter(r => r.rssi > -25);
-        
+        // Retrieve the latest state of the entry
+        const currentEntry = tagTracking.get(tagId);
+        if (!currentEntry) {
+             // Tag might have been deleted during the timeout if conditions weren't met
+             return;
+        }
+
+        const validReadings = currentEntry.readings.filter(r => r.rssi > -25);
+
         if (validReadings.length >= 2) {
           // Sort readings by timestamp
-          validReadings.sort((a, b) => a.timestamp - b.timestamp);
-          
-          // Check for 1.5-2 second duration
+          validReadings.sort((a, b) => a.timestamp.getTime() - b.timestamp.getTime());
+
+          // Check for 1.5-second duration (changed from 1.5-2 to just >= 1.5 based on code logic)
           const first = validReadings[0].timestamp.getTime();
-          const last = entry.readings[entry.readings.length - 1].timestamp.getTime();
+          const last = currentEntry.readings[currentEntry.readings.length - 1].timestamp.getTime(); // Use the last overall reading timestamp
           const duration = last - first;
 
           if (duration >= 1500) {
@@ -117,21 +172,30 @@ reader.on('tag', (data) => {
               status: book ? 'found' : 'not_found',
               data: book || {
                 tagId,
-                timestamp: last,
+                timestamp: last, // Use the last timestamp
                 duration,
               },
               error: book ? null : 'Unrecognized RFID tag'
             });
-            tagTracking.delete(tagId);
+            tagTracking.delete(tagId); // Remove tracking for this tag after successful scan
           }
         }
-        entry.processing = false;
-      }, 100);
+         // Ensure processing flag is reset, even if scan conditions weren't met
+        currentEntry.processing = false;
+        tagTracking.set(tagId, currentEntry);
+
+         // If no longer tracking this tag and processing finished, potentially emit idle
+         if (!tagTracking.has(tagId) && Object.keys(mockBooks).every(bookTagId => !tagTracking.has(bookTagId))) {
+             // This is a simplified check; a more robust solution might track active scanning
+             io.emit('scan_status', { status: 'idle' });
+         }
+
+      }, 100); // Short debounce
     }
 
   } catch (error) {
-    console.error('Error processing tag:', error);
-    io.emit('scan_error', { error: 'Error processing RFID tag' });
+    console.error('Error processing tag data:', data, 'Error:', error);
+    io.emit('scan_error', { error: 'Internal server error processing tag data' });
   }
 });
 
@@ -148,7 +212,10 @@ reader.on('error', (error) => {
   io.emit('scan_error', { error: error.message });
 });
 
-server.listen(4000, () => {
-  console.log('Server running on port 4000');
-  reader.start();
+db.sequelize.sync().then(() => {
+  server.listen(PORT, () => {
+    console.log(`server running on http://localhost:${PORT}`);
+    reader.start();
+
+  });
 });
