@@ -2,6 +2,7 @@
 const express = require('express');
 const { createServer } = require('http');
 const { Server } = require('socket.io');
+const cors = require('cors');
 const path = require('path');
 const db = require('./models'); // Assuming your Sequelize setup is here
 
@@ -12,6 +13,7 @@ const rfidService = require('./rfidService');
 
 const PORT = process.env.PORT || 4000;
 const app = express();
+app.use(cors()); // Add CORS middleware
 const server = createServer(app);
 app.use(express.json()); // Add JSON body parsing middleware
 

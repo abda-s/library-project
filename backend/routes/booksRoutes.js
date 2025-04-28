@@ -29,4 +29,21 @@ router.post('/add', async (req, res) => {
     }
 });
 
+// Get all books (no pagination)
+router.get('/', async (req, res) => {
+    try {
+        const booksDB = await books.findAll({
+            order: [['createdAt', 'DESC']]
+        });
+
+        res.json(booksDB);
+    } catch (error) {
+        console.error('Error fetching books:', error);
+        res.status(500).json({ 
+            error: 'Server error fetching books',
+            details: error.message
+        });
+    }
+});
+
 module.exports = router;
