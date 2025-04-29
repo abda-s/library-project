@@ -10,6 +10,7 @@ import {
 } from '@heroicons/react/24/outline';
 import { motion, AnimatePresence } from 'framer-motion';
 import Layout from '../Layout';
+import BookRegistrationModal from '../components/BookRegistrationModal';
 
 const NFCScanPage = () => {
   const navigate = useNavigate();
@@ -17,8 +18,10 @@ const NFCScanPage = () => {
   const [bookData, setBookData] = useState(null);
   const [errorMessage, setErrorMessage] = useState('');
   const [currentTagId, setCurrentTagId] = useState(null);
+  const [showRegistrationModal, setShowRegistrationModal] = useState(false);
 
   const canScan = useRef(true);
+
   const statusConfig = {
     idle: { color: '#E5E7EB', icon: BookOpenIcon, text: 'Ready to scan', subtext: 'Hold a book near the reader' },
     scanning: { color: '#3B82F6', icon: SignalIcon, text: 'Scanning', subtext: 'Please don\'t move the tag' },
@@ -34,43 +37,45 @@ const NFCScanPage = () => {
 
     // Handle scan status updates
     socket.on('scan_status', (data) => {
-        if(canScan.current){
-            setScanStatus(data.status);
-        
-            if (data.status === 'scanning') {
-              setCurrentTagId(data.tagId);
-              setBookData(null);
-              setErrorMessage('');
-            } else if (data.status === 'idle') {
-              setCurrentTagId(null);
-            }
-        }
-      });
-  
-      // Handle tag scan results
-      socket.on('tag_scanned', (data) => {
-        if(canScan.current){
-            setScanStatus(data.status);
-            if (data.status === 'found') {
-              setBookData(data.data);
-              setErrorMessage('');
-            } else {
-              setBookData(null);
-              setErrorMessage(data.error || 'Unknown tag');
-            }
-            canScan.current = false;
-                }
-        });
-  
-      // Handle scan errors
-      socket.on('scan_error', (error) => {
+      if (canScan.current) {
+        setScanStatus(data.status);
 
-        if(canScan.current){
-            setScanStatus('error');
-            setErrorMessage(error.error || 'Connection error');
-            canScan.current = false;
-                }
-      });
+        if (data.status === 'scanning') {
+          setCurrentTagId(data.tagId);
+          setBookData(null);
+          setErrorMessage('');
+        } else if (data.status === 'idle') {
+          setCurrentTagId(null);
+        }
+      }
+    });
+
+    // Handle tag scan results
+    socket.on('tag_scanned', (data) => {
+      if (canScan.current) {
+        setScanStatus(data.status);
+        if (data.status === 'found') {
+          setBookData(data.data);
+          console.log("Data: ", data.data);
+
+          setErrorMessage('');
+        } else {
+          setBookData(null);
+          setErrorMessage(data.error || 'Unknown tag');
+        }
+        canScan.current = false;
+      }
+    });
+
+    // Handle scan errors
+    socket.on('scan_error', (error) => {
+
+      if (canScan.current) {
+        setScanStatus('error');
+        setErrorMessage(error.error || 'Connection error');
+        canScan.current = false;
+      }
+    });
 
 
     // Clean up on unmount
@@ -108,7 +113,7 @@ const NFCScanPage = () => {
 
   const renderStatusContent = () => {
     const StatusIcon = statusConfig[scanStatus]?.icon || BookOpenIcon;
-    
+
     switch (scanStatus) {
       case 'scanning':
         return (
@@ -137,7 +142,7 @@ const NFCScanPage = () => {
             </motion.p>
           </motion.div>
         );
-        
+
       case 'found':
         return (
           <motion.div
@@ -163,7 +168,7 @@ const NFCScanPage = () => {
                   variants={textVariants}
                   className="text-white text-lg font-bold mt-2"
                 >
-                  {bookData.title}
+                  {bookData.name}
                 </motion.p>
                 <motion.p
                   variants={textVariants}
@@ -182,7 +187,7 @@ const NFCScanPage = () => {
             )}
           </motion.div>
         );
-        
+
       case 'not_found':
         return (
           <motion.div
@@ -219,13 +224,14 @@ const NFCScanPage = () => {
             <motion.button
               variants={textVariants}
               className="mt-4 bg-white text-amber-500 px-6 py-2 rounded-full font-medium"
-              onClick={() => navigate('/register-book', { state: { tagId: currentTagId } })}
+              onClick={() => setShowRegistrationModal(true)}
             >
               Register This Book
             </motion.button>
+
           </motion.div>
         );
-        
+
       case 'error':
         return (
           <motion.div
@@ -260,7 +266,7 @@ const NFCScanPage = () => {
             </motion.button>
           </motion.div>
         );
-        
+
       default: // idle
         return (
           <motion.div
@@ -346,7 +352,7 @@ const NFCScanPage = () => {
             </AnimatePresence>
 
             {/* Center Content */}
-            <motion.div 
+            <motion.div
               className="absolute inset-0 flex flex-col items-center justify-center text-center px-8"
               variants={staggerVariants}
               initial="hidden"
@@ -380,8 +386,8 @@ const NFCScanPage = () => {
                 </>
               ) : (
                 <>
-We dont have this book in our database<br />
-<button className="text-blue-500 hover:text-blue-700 transition-colors" onClick={() => handleResetScan()}>Scan Again</button>
+                  We dont have this book in our database<br />
+                  <button className="text-blue-500 hover:text-blue-700 transition-colors" onClick={() => handleResetScan()}>Scan Again</button>
 
 
                 </>
@@ -390,6 +396,12 @@ We dont have this book in our database<br />
           </div>
         </div>
       </div>
+      <BookRegistrationModal
+        isOpen={showRegistrationModal}
+        onClose={() => setShowRegistrationModal(false)}
+        tagId={currentTagId}
+        onSuccess={handleResetScan}
+      />
     </Layout>
   );
 };
