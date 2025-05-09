@@ -1,3 +1,4 @@
+require('dotenv').config(); // Load environment variables from .env file at the very top
 // backend/server.js
 const express = require('express');
 const { createServer } = require('http');
@@ -10,8 +11,10 @@ const csvLogger = require('./csvLogger');
 const bookService = require('./bookService');
 const socketHandler = require('./socketHandler');
 const rfidService = require('./rfidService');
+const authRoutes = require('./routes/authRoutes'); // Import auth routes
+const { verifyToken, authorizeRoles, authorizePermission } = require('./middleware/authMiddleware'); // Import auth middleware
 
-const PORT = process.env.PORT || 4000;
+const PORT = process.env.PORT || 4000; // PORT from .env or default to 4000
 const app = express();
 app.use(cors()); // Add CORS middleware
 const server = createServer(app);
@@ -51,7 +54,15 @@ rfidService.init(io, csvLogger.appendReading, socketHandler);
 
 
 const booksRoutes = require('./routes/booksRoutes');
-app.use('/books', booksRoutes);
+
+// Mount auth routes
+app.use('/api/auth', authRoutes);
+
+// Secure books routes
+// All /books routes will require a valid token
+// Specific permissions can be added to individual routes within booksRoutes.js if needed
+app.use('/books', verifyToken, booksRoutes);
+
 
 // Basic root route (optional)
 app.get('/', (req, res) => {

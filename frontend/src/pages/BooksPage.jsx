@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { Link } from 'react-router-dom';
+import React, { useState, useEffect, useCallback } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
 import {
   PlusIcon,
   ArrowLeftIcon,
@@ -9,15 +9,24 @@ import {
   ArrowUpRightIcon
 } from '@heroicons/react/24/outline';
 import Layout from '../Layout';
-import axios from 'axios';
+// import axios from 'axios'; // No longer directly needed for API calls here
 import BookEditModal from '../components/BookEditModal';
+import { useAuth } from '../context/AuthContext';
+import useApi from '../hooks/useApi'; // Import useApi
 
 function BooksPage() {
+  const { user } = useAuth(); // Only need user here, logout is handled by useApi
+  // const navigate = useNavigate(); // navigate is now handled by useApi for auth errors
+  const { get: apiGet, loading: apiLoading, error: apiError, setError: setApiError } = useApi();
   const [allBooks, setAllBooks] = useState([]);
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(10);
   const [showEditModal, setShowEditModal] = useState(false);
-  const [bookToEdit, setBookToEdit] = useState(null); // State to hold the data of the book being edited
+  const [bookToEdit, setBookToEdit] = useState(null);
+  // const [fetchError, setFetchError] = useState(null); // apiError from useApi will be used
+
+  // Permissions check
+  const canManageBooks = user?.role === 'admin' || user?.role === 'librarian';
 
   // Calculate pagination values
   const totalItems = allBooks.length;
@@ -27,24 +36,34 @@ function BooksPage() {
   const currentBooks = allBooks.slice(startIndex, endIndex);
 
   // Function to fetch books (replace with your actual fetch logic)
-  const fetchBooks = async () => {
+  const fetchBooks = useCallback(async () => {
+    // setFetchError(null); // Handled by useApi's setError
     try {
-      const response = await axios.get('http://localhost:4000/books'); // Your API endpoint
-      setAllBooks(response.data);
-    } catch (error) {
-      console.error('Error fetching books:', error);
-      // Handle error (e.g., show error message)
+      const data = await apiGet('/books'); // Use useApi's get method
+      setAllBooks(data);
+    } catch (err) {
+      // Error is already set by useApi hook and includes message & status
+      // Navigation on 401/403 is also handled by useApi
+      console.error('Error fetching books (caught in component):', err);
+      // If you need to display a specific message in UI, you can use apiError from useApi
     }
-  };
+  }, [apiGet]);
 
   useEffect(() => {
-    fetchBooks(); // Fetch books when the page loads
-  }, []);
+    if (user) { // Only fetch books if user is logged in (token should be set)
+      fetchBooks();
+    }
+  }, [fetchBooks, user]);
 
   // Function to call when a book item in the list is clicked
   const handleEditClick = (book) => {
-    setBookToEdit(book); // Set the book data to the state
-    setShowEditModal(true); // Open the modal
+    if (canManageBooks) {
+      setBookToEdit(book);
+      setShowEditModal(true);
+    } else {
+      // Optionally, show a message that they don't have permission
+      console.log("User does not have permission to edit books.");
+    }
   };
 
   // Function to call after a successful edit in the modal
@@ -105,13 +124,15 @@ function BooksPage() {
               </option>
             ))}
           </select>
-          <Link
-            to="/scan"
-            className="flex items-center bg-blue-600 text-white px-6 py-3 rounded-lg hover:bg-blue-700 transition-colors"
-          >
-            <PlusIcon className="w-5 h-5 mr-2" />
-            Add New Book
-          </Link>
+          {canManageBooks && (
+            <Link
+              to="/scan"
+              className="flex items-center bg-blue-600 text-white px-6 py-3 rounded-lg hover:bg-blue-700 transition-colors"
+            >
+              <PlusIcon className="w-5 h-5 mr-2" />
+              Add New Book
+            </Link>
+          )}
         </div>
       </div>
 
@@ -119,7 +140,10 @@ function BooksPage() {
         <h2 className="text-lg font-semibold mb-4 flex items-center">
           All Books
         </h2>
-
+        {apiLoading && <p className="text-blue-500">Loading books...</p>}
+        {apiError && <p className="text-red-500 bg-red-100 p-3 rounded-md mb-4">Error: {apiError.message}</p>}
+        {!apiLoading && !apiError && allBooks.length === 0 && <p>No books found.</p>}
+        {!apiLoading && !apiError && allBooks.length > 0 && (
         <div className="overflow-x-auto">
           <table className="w-full">
             <thead>
@@ -132,8 +156,10 @@ function BooksPage() {
             </thead>
             <tbody>
               {currentBooks.map((book) => (
-                <tr key={book.id} className="border-b border-gray-200 last:border-b-0 hover:bg-gray-50"
-                  onClick={() => handleEditClick(book)} // Click to open edit modal
+                <tr
+                  key={book.id}
+                  className={`border-b border-gray-200 last:border-b-0 ${canManageBooks ? 'hover:bg-gray-50 cursor-pointer' : ''}`}
+                  onClick={() => canManageBooks && handleEditClick(book)}
                 >
                   <td className="py-4">{book.name}</td>
                   <td className="py-4">{book.author || 'N/A'}</td>
@@ -150,8 +176,10 @@ function BooksPage() {
             </tbody>
           </table>
         </div>
+        )}
 
-        {/* Pagination Controls */}
+        {/* Pagination Controls - Show only if books are loaded and no error */}
+        {!apiLoading && !apiError && allBooks.length > 0 && (
         <div className="mt-6 flex justify-between items-center">
           <div className="text-sm text-gray-600">
             Showing {startIndex + 1} to {Math.min(endIndex, totalItems)} of{' '}
@@ -194,6 +222,7 @@ function BooksPage() {
             </button>
           </div>
         </div>
+        )}
       </div>
       {/* Render the Edit Modal */}
       <BookEditModal

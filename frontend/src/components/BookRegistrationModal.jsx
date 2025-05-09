@@ -2,9 +2,10 @@ import { useEffect } from 'react';
 import { useForm } from 'react-hook-form';
 import { yupResolver } from '@hookform/resolvers/yup';
 import * as yup from 'yup';
-import axios from 'axios';
+// import axios from 'axios'; // Replaced by useApi
 import { motion, AnimatePresence } from 'framer-motion';
 import { XMarkIcon, BookOpenIcon } from '@heroicons/react/24/outline';
+import useApi from '../hooks/useApi'; // Import useApi
 
 const schema = yup.object().shape({
     name: yup.string().required('Book name is required'),
@@ -13,12 +14,13 @@ const schema = yup.object().shape({
 });
 
 const BookRegistrationModal = ({ isOpen, onClose, tagId, onSuccess }) => {
+    const { post: apiPost, loading: apiLoading, error: apiCallError, setError: setApiCallError } = useApi();
     const {
         register,
         handleSubmit,
         reset,
         setValue,
-        formState: { errors, isSubmitting },
+        formState: { errors /*, isSubmitting */ }, // isSubmitting from react-hook-form can be replaced by apiLoading
         setError,
     } = useForm({
         resolver: yupResolver(schema),
@@ -38,15 +40,23 @@ const BookRegistrationModal = ({ isOpen, onClose, tagId, onSuccess }) => {
     }, [tagId, setValue]);
 
     const onSubmit = async (data) => {
+        setApiCallError(null); // Clear previous API errors
+        setError('root', { message: '' }); // Clear react-hook-form root error
         try {
-            await axios.post('http://localhost:4000/books/add', data);
-            onSuccess();
-            onClose();
-            reset();
-        } catch (error) {
-            setError('root', { message: error.response?.data?.message || 'Registration failed' });
+            await apiPost('/books/add', data); // Use useApi's post method
+            onSuccess(); // Call parent's success handler
+            onClose();   // Close modal
+            reset();     // Reset form
+        } catch (err) {
+            // Error is already set by useApi hook (apiCallError)
+            // and navigation on 401/403 is handled by useApi
+            console.error('Error registering book (caught in component):', err);
+            setError('root', { message: err.message || 'Registration failed' });
         }
     };
+
+    // Determine if an operation is in progress
+    const isOperationInProgress = apiLoading; // Use apiLoading from useApi
 
     return (
         <AnimatePresence>
@@ -90,7 +100,7 @@ const BookRegistrationModal = ({ isOpen, onClose, tagId, onSuccess }) => {
                                                 ? 'border-red-500 focus:ring-2 focus:ring-red-500 focus:border-red-500'
                                                 : 'border-gray-300 focus:ring-2 focus:ring-blue-500 focus:border-blue-500'
                                             }`}
-                                        disabled={isSubmitting}
+                                        disabled={isOperationInProgress}
                                     />
                                     {errors.name && (
                                         <p className="text-red-500 text-sm mt-1">{errors.name.message}</p>
@@ -104,7 +114,8 @@ const BookRegistrationModal = ({ isOpen, onClose, tagId, onSuccess }) => {
                                     <input
                                         type="text"
                                         {...register('author')}
-                                        className="w-full px-4 py-2 rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors" disabled={isSubmitting}
+                                        className="w-full px-4 py-2 rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
+                                        disabled={isOperationInProgress}
                                     />
                                 </div>
 
@@ -123,32 +134,29 @@ const BookRegistrationModal = ({ isOpen, onClose, tagId, onSuccess }) => {
                                     )}
                                 </div>
 
-                                {errors.root && (
-                                    <p className="text-red-500 text-sm">{errors.root.message}</p>
-                                )}
+                                {errors.root && <p className="text-red-500 text-sm">{errors.root.message}</p>}
+                                {apiCallError && <p className="text-red-500 text-sm">API Error: {apiCallError.message}</p>}
 
                                 <div className="flex justify-end gap-3 mt-6">
                                     <button
                                         type="button"
                                         onClick={() => {
-                                            reset({
-                                                name: '',
-                                                author: '',
-                                                tagId: tagId,
-                                            });
+                                            reset({ name: '', author: '', tagId: tagId });
+                                            setApiCallError(null); // Clear API error on cancel
+                                            setError('root', { message: '' }); // Clear form error on cancel
                                             onClose();
                                         }}
                                         className="px-4 py-2 text-gray-700 hover:bg-gray-50 rounded-lg"
-                                        disabled={isSubmitting}
+                                        disabled={isOperationInProgress}
                                     >
                                         Cancel
                                     </button>
                                     <button
                                         type="submit"
                                         className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50"
-                                        disabled={isSubmitting}
+                                        disabled={isOperationInProgress}
                                     >
-                                        {isSubmitting ? 'Registering...' : 'Register Book'}
+                                        {isOperationInProgress ? 'Registering...' : 'Register Book'}
                                     </button>
                                 </div>
                             </form>

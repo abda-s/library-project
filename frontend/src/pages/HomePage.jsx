@@ -10,49 +10,53 @@ import {
 } from '@heroicons/react/24/outline';
 import { BookOpenIcon as BookSolid } from '@heroicons/react/24/solid';
 import Layout from '../Layout';
-import axios from 'axios';
+// import axios from 'axios'; // Replaced by useApi
+import useApi from '../hooks/useApi'; // Import useApi
 
 const HomePage = () => {
+  const { get: apiGet, loading: apiLoading, error: apiError } = useApi(); // Use the hook
   const [stats, setStats] = useState({
     totalBooks: 0,
     activeTags: 0,
     recentScans: 0
   });
   const [recentBooks, setRecentBooks] = useState([]);
-  const [loading, setLoading] = useState(true);
+  // const [loading, setLoading] = useState(true); // Replaced by apiLoading from useApi
+  const [pageError, setPageError] = useState(null); // For displaying errors in UI
 
   useEffect(() => {
     const fetchData = async () => {
+      setPageError(null);
       try {
-        // Fetch books data
-        const booksResponse = await axios.get('http://localhost:4000/books');
-        const allBooks = booksResponse.data;
+        // Fetch books data using useApi
+        const allBooks = await apiGet('/books'); // Endpoint relative to baseURL in useApi
 
-        // Fetch recent scans (you'll need to implement this endpoint)
-        // const scansResponse = await axios.get('/api/scans/recent');
-        
-        // Calculate stats
-        setStats({
-          totalBooks: allBooks.length,
-          activeTags: allBooks.length, // Assuming 1 tag per book
-          recentScans: 54
-        });
+        if (allBooks) { // Check if data was successfully fetched
+          // Calculate stats
+          setStats({
+            totalBooks: allBooks.length,
+            activeTags: allBooks.length, // Assuming 1 tag per book
+            recentScans: 54 // Placeholder, as scans endpoint is not implemented
+          });
 
-        // Get recent books (last 3 added)
-        const sortedBooks = [...allBooks].sort(
-          (a, b) => new Date(b.createdAt) - new Date(a.createdAt)
-        );
-        setRecentBooks(sortedBooks.slice(0, 3));
-
+          // Get recent books (last 3 added)
+          const sortedBooks = [...allBooks].sort(
+            (a, b) => new Date(b.createdAt) - new Date(a.createdAt)
+          );
+          setRecentBooks(sortedBooks.slice(0, 3));
+        }
       } catch (error) {
-        console.error('Error fetching data:', error);
-      } finally {
-        setLoading(false);
+        // apiError from useApi will be set.
+        // We can use it directly or set a page-specific error message.
+        console.error('Error fetching homepage data (caught in component):', error);
+        setPageError(error.message || 'Failed to load dashboard data.');
+        // Auth errors (401/403) are handled by useApi (logout & redirect)
       }
+      // setLoading(false) is handled by useApi
     };
 
     fetchData();
-  }, []);
+  }, [apiGet]); // Depend on apiGet from useApi
 
   const statsConfig = [
     { 
@@ -71,11 +75,24 @@ const HomePage = () => {
     },
   ];
 
-  if (loading) {
+  if (apiLoading) {
     return (
       <Layout>
         <div className="min-h-screen flex items-center justify-center">
           <div className="animate-pulse text-gray-500">Loading dashboard...</div>
+        </div>
+      </Layout>
+    );
+  }
+  
+  if (apiError || pageError) {
+    return (
+      <Layout>
+        <div className="min-h-screen flex flex-col items-center justify-center p-4">
+          <p className="text-red-500 text-xl mb-4">
+            Error: {apiError?.message || pageError || 'Could not load dashboard data.'}
+          </p>
+          <p className="text-gray-600">Please try refreshing the page. If the problem persists, contact support.</p>
         </div>
       </Layout>
     );

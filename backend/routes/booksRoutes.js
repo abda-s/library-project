@@ -3,35 +3,35 @@ const express = require('express');
 const router = express.Router();
 const { books } = require('../models'); // from models/index.js
 const { Op } = require("sequelize"); // Needed for potential future complex queries, but not strictly for these simple ones
+const { authorizeRoles, authorizePermission } = require('../middleware/authMiddleware'); // Import auth middleware
 
 // POST /api/books/add - Create a new book
-router.post('/add', async (req, res) => {
+// Requires 'manage_books' permission (admin, librarian)
+router.post('/add', authorizePermission('manage_books'), async (req, res) => {
+    console.log(`[BooksRoutes] POST /add: User ID ${req.userId} attempting to add book. Body:`, req.body);
     try {
         const { tagId, name, author } = req.body;
 
-        // Validate required fields
         if (!tagId || !name) {
+            console.log('[BooksRoutes] POST /add: Failed - Missing tagId or name.');
             return res.status(400).json({ error: 'tagId and name are required fields' });
         }
 
-        // Optional: Check if a book with this tagId already exists before creating
         const existingBook = await books.findOne({ where: { tagId: tagId } });
         if (existingBook) {
-             return res.status(409).json({ error: 'A book with this Tag ID already exists' }); // 409 Conflict
+            console.log('[BooksRoutes] POST /add: Failed - Book with Tag ID already exists:', tagId);
+             return res.status(409).json({ error: 'A book with this Tag ID already exists' });
         }
 
-
-        // Create book in database
         const newBook = await books.create({
             tagId,
             name,
-            author: author || null // Make author optional, store null if empty string or undefined
+            author: author || null
         });
-
+        console.log('[BooksRoutes] POST /add: Success - Book added:', newBook.name, 'ID:', newBook.id);
         res.status(201).json(newBook);
     } catch (error) {
-        console.error('Error creating book:', error);
-        // Check for specific database errors, e.g., unique constraint violation if not checked above
+        console.error('[BooksRoutes] POST /add: Error creating book:', error);
          if (error.name === 'SequelizeUniqueConstraintError') {
              return res.status(409).json({ error: 'A book with this Tag ID already exists' });
          }
@@ -43,15 +43,17 @@ router.post('/add', async (req, res) => {
 });
 
 // GET /api/books - Get all books (no pagination)
-router.get('/', async (req, res) => {
+// Requires 'view_books' permission (admin, librarian, member)
+router.get('/', authorizePermission('view_books'), async (req, res) => {
+    console.log(`[BooksRoutes] GET /: User ID ${req.userId} fetching all books.`);
     try {
         const booksDB = await books.findAll({
-            order: [['createdAt', 'DESC']] // Order by creation date descending
+            order: [['createdAt', 'DESC']]
         });
-
+        console.log(`[BooksRoutes] GET /: Success - Found ${booksDB.length} books.`);
         res.json(booksDB);
     } catch (error) {
-        console.error('Error fetching books:', error);
+        console.error('[BooksRoutes] GET /: Error fetching books:', error);
         res.status(500).json({
             error: 'Server error fetching books',
             details: error.message
@@ -60,20 +62,22 @@ router.get('/', async (req, res) => {
 });
 
 // GET /api/books/:tagId - Get a single book by Tag ID (Optional, but good practice)
-router.get('/:tagId', async (req, res) => {
+// Requires 'view_books' permission (admin, librarian, member)
+router.get('/:tagId', authorizePermission('view_books'), async (req, res) => {
+    const { tagId } = req.params;
+    console.log(`[BooksRoutes] GET /${tagId}: User ID ${req.userId} fetching book by Tag ID.`);
     try {
-        const { tagId } = req.params;
-
         const book = await books.findOne({ where: { tagId: tagId } });
 
         if (!book) {
+            console.log(`[BooksRoutes] GET /${tagId}: Failed - Book not found.`);
             return res.status(404).json({ error: 'Book not found' });
         }
-
+        console.log(`[BooksRoutes] GET /${tagId}: Success - Found book:`, book.name);
         res.json(book);
 
     } catch (error) {
-        console.error('Error fetching single book:', error);
+        console.error(`[BooksRoutes] GET /${tagId}: Error fetching single book:`, error);
         res.status(500).json({
             error: 'Server error fetching book',
             details: error.message
@@ -83,36 +87,33 @@ router.get('/:tagId', async (req, res) => {
 
 
 // PUT /api/books/update/:tagId - Update a book
-router.put('/update/:tagId', async (req, res) => {
+// Requires 'manage_books' permission (admin, librarian)
+router.put('/update/:tagId', authorizePermission('manage_books'), async (req, res) => {
+    const { tagId } = req.params;
+    console.log(`[BooksRoutes] PUT /update/${tagId}: User ID ${req.userId} attempting to update book. Body:`, req.body);
     try {
-        const { tagId } = req.params;
-        const { name, author } = req.body; // Get updated fields from body
+        const { name, author } = req.body;
 
-        // Basic validation: Ensure name is provided for update
         if (!name) {
+            console.log(`[BooksRoutes] PUT /update/${tagId}: Failed - Book name is required.`);
              return res.status(400).json({ error: 'Book name is required for update' });
         }
 
-        // Find the book by tagId
         const book = await books.findOne({ where: { tagId: tagId } });
 
-        // If book not found
         if (!book) {
+            console.log(`[BooksRoutes] PUT /update/${tagId}: Failed - Book not found.`);
             return res.status(404).json({ error: 'Book not found' });
         }
 
-        // Update book attributes
         book.name = name;
-        book.author = author || null; // Update author, allow setting to null
-
-        // Save the updated book
+        book.author = author || null;
         await book.save();
-
-        // Respond with the updated book or a success message
-        res.status(200).json(book); // Or { message: 'Book updated successfully', book: book }
+        console.log(`[BooksRoutes] PUT /update/${tagId}: Success - Book updated:`, book.name);
+        res.status(200).json(book);
 
     } catch (error) {
-        console.error('Error updating book:', error);
+        console.error(`[BooksRoutes] PUT /update/${tagId}: Error updating book:`, error);
         res.status(500).json({
             error: 'Server error updating book',
             details: error.message
@@ -121,27 +122,24 @@ router.put('/update/:tagId', async (req, res) => {
 });
 
 // DELETE /api/books/:tagId - Delete a book
-router.delete('/:tagId', async (req, res) => {
+// Requires 'manage_books' permission (admin, librarian)
+router.delete('/:tagId', authorizePermission('manage_books'), async (req, res) => {
+    const { tagId } = req.params;
+    console.log(`[BooksRoutes] DELETE /${tagId}: User ID ${req.userId} attempting to delete book.`);
     try {
-        const { tagId } = req.params;
-
-        // Find the book by tagId
         const book = await books.findOne({ where: { tagId: tagId } });
 
-        // If book not found
         if (!book) {
+            console.log(`[BooksRoutes] DELETE /${tagId}: Failed - Book not found.`);
             return res.status(404).json({ error: 'Book not found' });
         }
 
-        // Delete the book
         await book.destroy();
-
-        // Respond with success message
-        // 200 OK with a message, or 204 No Content are common for successful deletion
-        res.status(200).json({ message: 'Book deleted successfully', tagId: tagId }); // Including tagId in response can be useful
+        console.log(`[BooksRoutes] DELETE /${tagId}: Success - Book deleted.`);
+        res.status(200).json({ message: 'Book deleted successfully', tagId: tagId });
 
     } catch (error) {
-        console.error('Error deleting book:', error);
+        console.error(`[BooksRoutes] DELETE /${tagId}: Error deleting book:`, error);
         res.status(500).json({
             error: 'Server error deleting book',
             details: error.message

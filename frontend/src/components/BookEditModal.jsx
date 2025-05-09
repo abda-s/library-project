@@ -3,9 +3,12 @@ import { useEffect, useState } from 'react'; // Import useState
 import { useForm } from 'react-hook-form';
 import { yupResolver } from '@hookform/resolvers/yup';
 import * as yup from 'yup';
-import axios from 'axios';
+// import axios from 'axios'; // No longer directly needed for API calls here
 import { motion, AnimatePresence } from 'framer-motion';
-import { XMarkIcon, BookOpenIcon, PencilIcon, TrashIcon } from '@heroicons/react/24/outline'; // Import TrashIcon
+import { XMarkIcon, BookOpenIcon, PencilIcon, TrashIcon } from '@heroicons/react/24/outline';
+import { useAuth } from '../context/AuthContext';
+// import { useNavigate } from 'react-router-dom'; // useNavigate is handled by useApi for auth errors
+import useApi from '../hooks/useApi'; // Import useApi
 
 // Define the schema for the editable fields
 const schema = yup.object().shape({
@@ -16,7 +19,10 @@ const schema = yup.object().shape({
 });
 
 const BookEditModal = ({ isOpen, onClose, bookData, onSuccess }) => {
-    const [isDeleting, setIsDeleting] = useState(false); // State for delete loading state
+    // const { user, logout } = useAuth(); // logout is handled by useApi
+    const { put: apiPut, del: apiDel, loading: apiLoading, error: apiCallError, setError: setApiCallError } = useApi();
+    // const navigate = useNavigate(); // Handled by useApi
+    const [isDeleting, setIsDeleting] = useState(false); // Keep for UI state of delete button
     const {
         register,
         handleSubmit,
@@ -59,21 +65,23 @@ const BookEditModal = ({ isOpen, onClose, bookData, onSuccess }) => {
 
     const onSubmit = async (formData) => {
         // Ensure tagId is included in the data sent
-        const dataToSend = { ...formData, tagId: bookData.tagId };
-        setError('root', { message: '' }); // Clear root error before submitting
+        const dataToSend = { ...formData, tagId: bookData.tagId }; // Ensure tagId from bookData is used if not in form
+        setApiCallError(null); // Clear previous API errors from useApi
+        setError('root', { message: '' }); // Clear react-hook-form root error
 
         try {
-            // Assuming your update endpoint is PUT /books/update/:tagId
-            await axios.put(`http://localhost:4000/books/update/${bookData.tagId}`, dataToSend);
+            await apiPut(`/books/update/${bookData.tagId}`, dataToSend);
 
             if (onSuccess) {
-                onSuccess(); // Notify parent of success (e.g., refetch list)
+                onSuccess();
             }
-            onClose(); // Close modal
+            onClose();
 
-        } catch (error) {
-            console.error('Error updating book:', error);
-            setError('root', { message: error.response?.data?.message || 'Failed to update book' });
+        } catch (err) {
+            // Error is already set by useApi hook (apiCallError)
+            // and navigation on 401/403 is handled by useApi
+            console.error('Error updating book (caught in component):', err);
+            setError('root', { message: err.message || 'Failed to update book' });
         }
     };
 
@@ -86,30 +94,33 @@ const BookEditModal = ({ isOpen, onClose, bookData, onSuccess }) => {
         const confirmed = window.confirm(`Are you sure you want to delete the book "${bookData.name || bookData.tagId}"?`);
 
         if (confirmed) {
-            setIsDeleting(true); // Set deleting loading state
-            setError('root', { message: '' }); // Clear root error before deleting
+            setIsDeleting(true);
+            setApiCallError(null); // Clear previous API errors
+            setError('root', { message: '' }); // Clear react-hook-form root error
 
             try {
-                // Assuming your delete endpoint is DELETE /books/:tagId
-                await axios.delete(`http://localhost:4000/books/${bookData.tagId}`);
+                await apiDel(`/books/${bookData.tagId}`);
 
                 if (onSuccess) {
-                    onSuccess(); // Notify parent of success (e.g., refetch list)
+                    onSuccess();
                 }
-                onClose(); // Close modal
+                onClose();
 
-            } catch (error) {
-                console.error('Error deleting book:', error);
-                setError('root', { message: error.response?.data?.message || 'Failed to delete book' });
+            } catch (err) {
+                // Error is already set by useApi hook (apiCallError)
+                // and navigation on 401/403 is handled by useApi
+                console.error('Error deleting book (caught in component):', err);
+                setError('root', { message: err.message || 'Failed to delete book' });
             } finally {
-                setIsDeleting(false); // Reset deleting loading state
+                setIsDeleting(false);
             }
         }
     };
 
 
-    // Disable buttons while submitting (editing) or deleting
-    const isOperationInProgress = isSubmitting || isDeleting;
+    // Disable buttons while submitting (react-hook-form's isSubmitting),
+    // or api is loading (useApi's apiLoading), or delete button specific loading (isDeleting)
+    const isOperationInProgress = isSubmitting || apiLoading || isDeleting;
 
     return (
         <AnimatePresence>
@@ -202,9 +213,9 @@ const BookEditModal = ({ isOpen, onClose, bookData, onSuccess }) => {
                                         type="button"
                                         onClick={handleDelete}
                                         className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 disabled:opacity-50 flex items-center gap-1"
-                                        disabled={isOperationInProgress} // Disable while saving or deleting
+                                        disabled={isOperationInProgress}
                                     >
-                                       {isDeleting ? 'Deleting...' : <><TrashIcon className="w-5 h-5"/> Delete Book</>}
+                                       {isDeleting ? 'Deleting...' : <><TrashIcon className="w-5 h-5"/> Delete</>}
                                     </button>
 
                                      {/* Save/Cancel Buttons (right-aligned) */}
@@ -213,16 +224,16 @@ const BookEditModal = ({ isOpen, onClose, bookData, onSuccess }) => {
                                             type="button"
                                             onClick={onClose}
                                             className="px-4 py-2 text-gray-700 hover:bg-gray-50 rounded-lg disabled:opacity-50"
-                                            disabled={isOperationInProgress} // Disable while saving or deleting
+                                            disabled={isOperationInProgress}
                                         >
                                             Cancel
                                         </button>
                                         <button
                                             type="submit"
                                             className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50"
-                                            disabled={isOperationInProgress} // Disable while saving or deleting
+                                            disabled={isOperationInProgress}
                                         >
-                                            {isSubmitting ? 'Saving...' : 'Save Changes'}
+                                            {(isSubmitting || (apiLoading && !isDeleting)) ? 'Saving...' : 'Save Changes'}
                                         </button>
                                     </div>
                                 </div>

@@ -1,26 +1,32 @@
 {
   "development": {
-    "username": "postgres",
-    "password": "12345678",
-    "database": "library_db",
-    "host": "127.0.0.1",
+    "username": "your_db_username_placeholder",
+    "password": "your_db_password_placeholder",
+    "database": "your_db_name_placeholder",
+    "host": "localhost_placeholder",
     "dialect": "postgres",
     "logging": false
   },
-  "test":{
-    "username": "postgres",
-    "password": "12345678",
-    "database": "library_db",
-    "host": "127.0.0.1",
+  "test": {
+    "username": "your_db_username_placeholder_test",
+    "password": "your_db_password_placeholder_test",
+    "database": "your_db_name_placeholder_test",
+    "host": "localhost_placeholder_test",
     "dialect": "postgres",
     "logging": false
   },
-  "production":{
-    "username": "postgres",
-    "password": "12345678",
-    "database": "library_db",
-    "host": "127.0.0.1",
+  "production": {
+    "username": "your_db_username_placeholder_prod",
+    "password": "your_db_password_placeholder_prod",
+    "database": "your_db_name_placeholder_prod",
+    "host": "localhost_placeholder_prod",
     "dialect": "postgres",
-    "logging": false
+    "logging": false,
+    "dialectOptions": {
+      "ssl": {
+        "require": true,
+        "rejectUnauthorized": false
+      }
+    }
   }
 }
