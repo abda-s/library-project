@@ -42,7 +42,7 @@ const initializeDatabase = async () => {
 socketHandler.init(io);
 
 // Initialize CSV Logger (ensures file exists)
-csvLogger.init();
+// csvLogger.init();
 
 // Initialize and start RFID service
 // rfidService.init(io, csvLogger.appendReading, socketHandler);

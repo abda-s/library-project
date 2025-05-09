@@ -299,7 +299,7 @@ const NFCScanPage = () => {
 
   return (
     <Layout>
-      <div className="min-h-screen bg-gray-50 p-8 flex items-center justify-center">
+      <div className="min-h-screen p-8 flex items-center justify-center">
         <div className="max-w-sm w-full">
           {/* Header */}
           <div className="mb-8 text-center">

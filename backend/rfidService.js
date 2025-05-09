@@ -11,12 +11,12 @@ const reader = new RFIDReader({ debug: true });
 const tagTracking = new Map();
 
 const init = (ioInstance, csvLoggerFunc, socketHandlerInstance) => {
-    io = ioInstance;
-    appendReadingToCsv = csvLoggerFunc;
-    socketHandler = socketHandlerInstance;
-    setupReaderEvents();
-  };
-  
+  io = ioInstance;
+  appendReadingToCsv = csvLoggerFunc;
+  socketHandler = socketHandlerInstance;
+  setupReaderEvents();
+};
+
 
 const setupReaderEvents = () => {
   reader.on('tag', handleTagData);
@@ -81,21 +81,32 @@ const handleTagData = async (data) => {
     appendReadingToCsv(port, tagId, dateUtc, rssiStr);
     // <=== SAVE TO CSV
 
+    io.emit('raw_rfid_data', {
+      port,
+      tagId,
+      timestamp: dateUtc,   // e.g. '2025-05-08T12:34:56.789Z'
+      rssi: numericRssi
+    });
+    console.log(`Received data: port=${port}, tagId=${tagId}, timestamp=${dateUtc}, rssi=${numericRssi}`);
+    
+
+    if (port !== '1') return; // connect the antinna to port 1
+
     // Handle RSSI < -50 (consider as tag moved away)
     if (numericRssi < -50) {
       const entry = tagTracking.get(tagId);
       // If we were tracking this tag and it's no longer being read strongly, check if scanning can stop
       if (entry && entry.readings.length === 0) {
-         // This is a simplified check; a more robust solution might track active scanning
-         if (Object.keys(getBookById({})).every(bookTagId => !tagTracking.has(bookTagId) || (tagTracking.has(bookTagId) && tagTracking.get(bookTagId).readings.every(r => r.rssi < -50)))) {
-              socketHandler.emitScanStatus('idle');
-         }
+        // This is a simplified check; a more robust solution might track active scanning
+        if (Object.keys(getBookById({})).every(bookTagId => !tagTracking.has(bookTagId) || (tagTracking.has(bookTagId) && tagTracking.get(bookTagId).readings.every(r => r.rssi < -50)))) {
+          socketHandler.emitScanStatus('idle');
+        }
       }
       return; // Stop processing for weak signals
     }
 
     // Handle RSSI > -25 (trigger scanning status)
-    if (numericRssi > -25) {
+    if (numericRssi > -30) {
       socketHandler.emitScanStatus('scanning', tagId);
     }
 
@@ -150,9 +161,9 @@ const handleTagData = async (data) => {
           if (duration >= 1500) { // Duration is 1500ms (1.5 seconds)
             const book = await books.findOne({ where: { tagId: tagId } });
 
-            
+
             const bookData = book ? book.toJSON() : null;
-              
+
             // Determine the status and data payload exactly like the original
             const status = bookData ? 'found' : 'not_found';
             const dataPayload = bookData || {
@@ -172,20 +183,20 @@ const handleTagData = async (data) => {
         // Ensure processing flag is reset
         // Only reset if the tag is still being tracked (not deleted by a successful scan)
         if (tagTracking.has(tagId)) {
-            const updatedEntry = tagTracking.get(tagId);
-            updatedEntry.processing = false;
-            tagTracking.set(tagId, updatedEntry);
+          const updatedEntry = tagTracking.get(tagId);
+          updatedEntry.processing = false;
+          tagTracking.set(tagId, updatedEntry);
         }
 
         // After processing, check if scanning can go back to idle
         // This check needs refinement based on how you determine 'idle' state
         // A simple approach is to check if any tags with RSSI > -25 are still being tracked.
         const activeTags = Array.from(tagTracking.values()).filter(entry =>
-            entry.readings.some(reading => reading.rssi > -25)
+          entry.readings.some(reading => reading.rssi > -25)
         );
 
         if (activeTags.length === 0) {
-             socketHandler.emitScanStatus('idle');
+          socketHandler.emitScanStatus('idle');
         }
 
 

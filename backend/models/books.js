@@ -12,6 +12,11 @@ module.exports = (sequelize, DataTypes) => {
       author: {  // Fixed typo from 'auther'
         type: DataTypes.STRING,
         allowNull: true
+      },
+      checkedIn: {
+        type: DataTypes.BOOLEAN,
+        allowNull: false,
+        defaultValue: false
       }
     }, {
       timestamps: true,

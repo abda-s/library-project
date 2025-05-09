@@ -5,15 +5,19 @@ import {
   ArrowLeftIcon,
   ArrowRightIcon,
   ChevronDoubleLeftIcon,
-  ChevronDoubleRightIcon
+  ChevronDoubleRightIcon,
+  ArrowUpRightIcon
 } from '@heroicons/react/24/outline';
 import Layout from '../Layout';
 import axios from 'axios';
+import BookEditModal from '../components/BookEditModal';
 
 function BooksPage() {
   const [allBooks, setAllBooks] = useState([]);
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(10);
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [bookToEdit, setBookToEdit] = useState(null); // State to hold the data of the book being edited
 
   // Calculate pagination values
   const totalItems = allBooks.length;
@@ -22,18 +26,38 @@ function BooksPage() {
   const endIndex = startIndex + itemsPerPage;
   const currentBooks = allBooks.slice(startIndex, endIndex);
 
-  useEffect(() => {
-    const fetchBooks = async () => {
-      try {
-        const response = await axios.get('http://localhost:4000/books');
-        setAllBooks(response.data);
-      } catch (error) {
-        console.error('Error fetching books:', error);
-      }
-    };
+  // Function to fetch books (replace with your actual fetch logic)
+  const fetchBooks = async () => {
+    try {
+      const response = await axios.get('http://localhost:4000/books'); // Your API endpoint
+      setAllBooks(response.data);
+    } catch (error) {
+      console.error('Error fetching books:', error);
+      // Handle error (e.g., show error message)
+    }
+  };
 
-    fetchBooks();
+  useEffect(() => {
+    fetchBooks(); // Fetch books when the page loads
   }, []);
+
+  // Function to call when a book item in the list is clicked
+  const handleEditClick = (book) => {
+    setBookToEdit(book); // Set the book data to the state
+    setShowEditModal(true); // Open the modal
+  };
+
+  // Function to call after a successful edit in the modal
+  const handleEditSuccess = () => {
+    fetchBooks(); // Re-fetch the list to show updated data
+    // Or update state locally if you prefer
+  };
+
+  // Function to close the modal
+  const handleCloseModal = () => {
+    setShowEditModal(false);
+    setBookToEdit(null); // Clear the book data when modal closes
+  };
 
   const handlePageChange = (newPage) => {
     if (newPage >= 1 && newPage <= totalPages) {
@@ -48,11 +72,10 @@ function BooksPage() {
         <button
           key={i}
           onClick={() => handlePageChange(i)}
-          className={`px-3 py-1 rounded-md ${
-            currentPage === i
-              ? 'bg-blue-600 text-white'
-              : 'hover:bg-gray-100 text-gray-700'
-          }`}
+          className={`px-3 py-1 rounded-md ${currentPage === i
+            ? 'bg-blue-600 text-white'
+            : 'hover:bg-gray-100 text-gray-700'
+            }`}
         >
           {i}
         </button>
@@ -72,7 +95,7 @@ function BooksPage() {
             value={itemsPerPage}
             onChange={(e) => {
               setItemsPerPage(Number(e.target.value));
-              setCurrentPage(1); // Reset to first page when changing page size
+              setCurrentPage(1);
             }}
             className="border rounded-md px-3 py-2 text-sm"
           >
@@ -83,7 +106,7 @@ function BooksPage() {
             ))}
           </select>
           <Link
-            to="/add-book"
+            to="/scan"
             className="flex items-center bg-blue-600 text-white px-6 py-3 rounded-lg hover:bg-blue-700 transition-colors"
           >
             <PlusIcon className="w-5 h-5 mr-2" />
@@ -93,14 +116,24 @@ function BooksPage() {
       </div>
 
       <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
+        <h2 className="text-lg font-semibold mb-4 flex items-center">
+          All Books
+        </h2>
+
         <div className="overflow-x-auto">
           <table className="w-full">
-            {/* Table header remains same as before */}
+            <thead>
+              <tr className="text-left text-gray-500 border-b border-gray-200">
+                <th className="pb-3">Title</th>
+                <th className="pb-3">Author</th>
+                <th className="pb-3">NFC Tag ID</th>
+                <th className="pb-3">Date Added</th>
+              </tr>
+            </thead>
             <tbody>
               {currentBooks.map((book) => (
-                <tr
-                  key={book.id}
-                  className="border-b border-gray-200 last:border-b-0 hover:bg-gray-50"
+                <tr key={book.id} className="border-b border-gray-200 last:border-b-0 hover:bg-gray-50"
+                  onClick={() => handleEditClick(book)} // Click to open edit modal
                 >
                   <td className="py-4">{book.name}</td>
                   <td className="py-4">{book.author || 'N/A'}</td>
@@ -118,7 +151,7 @@ function BooksPage() {
           </table>
         </div>
 
-        {/* Enhanced Pagination Controls */}
+        {/* Pagination Controls */}
         <div className="mt-6 flex justify-between items-center">
           <div className="text-sm text-gray-600">
             Showing {startIndex + 1} to {Math.min(endIndex, totalItems)} of{' '}
@@ -162,6 +195,13 @@ function BooksPage() {
           </div>
         </div>
       </div>
+      {/* Render the Edit Modal */}
+      <BookEditModal
+        isOpen={showEditModal}
+        onClose={handleCloseModal}
+        bookData={bookToEdit} // Pass the selected book data
+        onSuccess={handleEditSuccess} // Pass the success hanFdler
+      />
     </Layout>
   );
 }

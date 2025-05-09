@@ -16,7 +16,6 @@ const Sidebar = () => {
   const navigation = [
     { name: 'Home', href: '/', icon: FiHome },
     { name: 'Books', href: '/books', icon: FaBook },
-    { name: 'Tags', href: '/tags', icon: FaTags },
     { name: 'History', href: '/history', icon: FaHistory },
     { name: 'Settings', href: '/settings', icon: FaCog },
   ];
