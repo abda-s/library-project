@@ -11,7 +11,6 @@ import RegisterPage from '../pages/RegisterPage';
 import UserInfoPage from '../pages/UserInfoPage'; // Import UserInfoPage
 
 // Components
-import Layout from '../Layout'; // Layout for protected pages
 import ProtectedRoute from './ProtectedRoute'; // HOC for protected routes
 import { useAuth } from '../context/AuthContext'; // To check user status for fallback
 

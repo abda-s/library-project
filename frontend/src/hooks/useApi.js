@@ -2,6 +2,7 @@ import { useState, useCallback } from 'react';
 import axios from 'axios';
 import { useAuth } from '../context/AuthContext';
 import { useNavigate } from 'react-router-dom';
+import { toast } from 'react-toastify'; // Import toast
 
 const useApi = () => {
   const [loading, setLoading] = useState(false);
@@ -49,6 +50,19 @@ const useApi = () => {
       });
       console.log(`[useApi] Request: Success for ${method.toUpperCase()} ${fullUrl}`, response.data);
       setLoading(false);
+
+      // Show success toast for relevant methods
+      const successMessage = response.data?.message; // Use message from API response if available
+      if (method === 'post') {
+        toast.success(successMessage || 'Item created successfully!');
+      } else if (method === 'put') {
+        toast.success(successMessage || 'Item updated successfully!');
+      } else if (method === 'delete') {
+        toast.success(successMessage || 'Item deleted successfully!');
+      }
+      // For login/register, success message is handled in AuthContext or component
+      // We can add more specific messages based on URL patterns if needed
+
       return response.data;
     } catch (err) {
       setLoading(false);
@@ -57,6 +71,12 @@ const useApi = () => {
       setError({ message: errorMessage, status: errorStatus });
       console.error(`[useApi] Request: Failed for ${method.toUpperCase()} ${fullUrl}. Status: ${errorStatus}. Message: ${errorMessage}`, err.response || err);
 
+      // Show error toast for relevant methods (excluding GET by default)
+      // For login/register, error message is handled in AuthContext or component
+      if (method !== 'get' && !(url.includes('/api/auth/login') || url.includes('/api/auth/register'))) {
+         toast.error(errorMessage);
+      }
+      
       if (errorStatus === 401 || errorStatus === 403) {
         console.log(`[useApi] Request: Auth error (${errorStatus}), logging out and redirecting to login.`);
         if (logout) {
@@ -67,7 +87,7 @@ const useApi = () => {
       // Re-throw a simplified error object for the component to catch if needed
       throw { message: errorMessage, status: errorStatus, originalError: err };
     }
-  }, [token, logout, navigate, apiClient.defaults.baseURL]); // Added apiClient.defaults.baseURL
+  }, [token, logout, navigate, apiClient.defaults.baseURL]);
 
   const get = useCallback((url, params = null) => {
     console.log(`[useApi] GET: Called for URL: ${url}`, params);
